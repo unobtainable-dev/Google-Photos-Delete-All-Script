@@ -1,0 +1,126 @@
+(async function preciseTopRightTrashEngine() {
+    const TARGET_BATCH_SIZE = 12;  // Пакет слика
+    const BASE_CLICK_SPEED = 180;   
+    const DISPOSAL_COOLDOWN = 2500; // Пауза за синхронизацију облака
+
+    const sleep = (ms) => new Promise(res => setTimeout(res, ms));
+    const getJitter = (base) => base + Math.floor(Math.random() * 50);
+
+    console.log("=== СТАРТУЈЕМ ПРЕЦИЗНИ ЕНЏИН ЗА ГОРЊИ ДЕСНИ УГАО ===");
+
+    while (true) {
+        // 1. Налажење чекбоксова
+        let checkboxes = Array.from(document.querySelectorAll('div[role="checkbox"][aria-checked="false"]'));
+        if (checkboxes.length === 0) {
+            checkboxes = Array.from(document.querySelectorAll('.ckGgle[aria-checked="false"]'));
+        }
+
+        if (checkboxes.length === 0) {
+            console.log("Нема слика за селекцију. Скролујем на доле...");
+            window.scrollBy(0, window.innerHeight / 2);
+            await sleep(1500);
+            continue;
+        }
+
+        let processedThisRun = 0;
+        
+        // 2. Селектовање пакета слика
+        for (let i = 0; i < checkboxes.length && processedThisRun < TARGET_BATCH_SIZE; i++) {
+            let box = checkboxes[i];
+            if (box.getAttribute('aria-checked') === 'false') {
+                box.click();
+                processedThisRun++;
+                await sleep(getJitter(BASE_CLICK_SPEED));
+            }
+        }
+
+        if (processedThisRun === 0) {
+            window.scrollBy(0, window.innerHeight / 3);
+            await sleep(600);
+            continue;
+        }
+
+        // КЉУЧНА ПАУЗА: Чекамо да Google учита горњу траку са кантом након селекције
+        console.log(`Селектовано ${processedThisRun} слика. Чекам да се појави канта у десном углу...`);
+        await sleep(800); 
+
+        // 3. Лоцирање канте преко позиције у горњем десном углу (као на слици)
+        let trashBtn = null;
+        // Хватамо СВА дугмад у горњој траци / заглављу
+        const topButtons = document.querySelectorAll('header button, div[role="toolbar"] button, .g-wrapper button');
+        
+        for (let btn of topButtons) {
+            let rect = btn.getBoundingClientRect();
+            // Канта се на твом скриншоту налази скроз десно (између 100 и 25 пиксела од десне ивице екрана)
+            if (rect.right > window.innerWidth - 120 && rect.right < window.innerWidth - 10 && rect.top < 100) {
+                if (btn.offsetWidth > 0 && btn.offsetHeight > 0) {
+                    trashBtn = btn;
+                    break;
+                }
+            }
+        }
+
+        // Злу не требало fallback: ако геометрија омане, пробај преко сигурног атрибута тултипа који се види на слици
+        if (!trashBtn) {
+            trashBtn = document.querySelector('button[aria-label*="отпад"], button[aria-label*="trash"], [data-tooltip*="отпад"]');
+        }
+
+        if (trashBtn) {
+            console.log("Канта лоцирана у десном углу. Кликам на канту...");
+            trashBtn.click();
+            await sleep(1000); // Чекамо да се отвори дијалог на средини екрана
+
+            // 4. КОРAК: Провера досадног прозора "Важи" (ако се икада поново појави)
+            const modalButtons = document.querySelectorAll('button, [role="button"]');
+            for (let btn of modalButtons) {
+                const txt = btn.textContent || "";
+                if (txt.includes("Важи") || txt.includes("важи") || txt.includes("У реду")) {
+                    if (btn.offsetWidth > 0 && btn.offsetHeight > 0) {
+                        console.log("Кликам на међу-корак 'Важи'...");
+                        btn.click();
+                        await sleep(800); 
+                        break;
+                    }
+                }
+            }
+
+            // 5. КОРAК: Финална потврда ("Премести у отпад" у дијалогу)
+            let finalConfirmBtn = null;
+            const dialogButtons = document.querySelectorAll('g-dialog button, [role="dialog"] button, button');
+            
+            for (let btn of dialogButtons) {
+                const txt = btn.textContent || "";
+                if (txt.includes("отпад") || txt.includes("Премести") || txt.includes("Смеће")) {
+                    if (btn.offsetWidth > 0 && btn.offsetHeight > 0) {
+                        finalConfirmBtn = btn;
+                        break;
+                    }
+                }
+            }
+
+            // Fallback за дијалог: узми последње активно дугме у искачућем прозору
+            if (!finalConfirmBtn) {
+                const standardModals = document.querySelectorAll('g-dialog button, [role="dialog"] button');
+                if (standardModals.length > 0) {
+                    finalConfirmBtn = standardModals[standardModals.length - 1];
+                }
+            }
+
+            if (finalConfirmBtn) {
+                console.log(`Потврђујем премештање акцијом: "${finalConfirmBtn.textContent.trim()}"`);
+                finalConfirmBtn.click();
+                // Чекамо да слике нестану са екрана и ослободе меморију
+                await sleep(DISPOSAL_COOLDOWN);
+            } else {
+                console.log("Прозор за потврду се није појавио. Повлачим селекцију (Esc)...");
+                document.dispatchEvent(new KeyboardEvent('keydown', {'key': 'Escape'}));
+                await sleep(1000);
+            }
+
+        } else {
+            console.log("Канта се није појавила у горњем десном углу. Ресетујем селекцију ради сигурности...");
+            document.dispatchEvent(new KeyboardEvent('keydown', {'key': 'Escape'}));
+            await sleep(1500);
+        }
+    }
+})();
